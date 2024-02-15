@@ -1,12 +1,16 @@
 ﻿@RinhaAPI_HostAddress = http://localhost:5083
 
-POST {{RinhaAPI_HostAddress}}/clientes/{id}/transacoes
+POST {{RinhaAPI_HostAddress}}/clientes/2/transacoes
+Content-Type: application/json 
 
-Content-Type application/json 
 {
     "clienteId": 2,
-    "valor": 100,
+    "valor": "100",
     "tipo": "c",
-    "descricao": "desc";
+    "descricao": "desc"
 }
+###
+
+GET {{RinhaAPI_HostAddress}}/clientes/2/extrato
+
 ###

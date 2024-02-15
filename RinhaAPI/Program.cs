@@ -1,7 +1,4 @@
 using Dapper;
-using Microsoft.AspNetCore.Authentication;
-using Microsoft.Extensions.Logging;
-using Npgsql;
 using RinhaAPI.Models;
 using RinhaAPI.Services;
 using System.Text.Json;
@@ -32,8 +29,6 @@ app.MapPost("/clientes/{id}/transacoes", async (
     ILoggerFactory loggerFactory,
     IConfiguration config) =>
 {
-    var logger = loggerFactory.CreateLogger("meuLogger");
-
     if (!int.TryParse(transacao.Valor?.ToString(), out var valorInt))
     {
         return Results.UnprocessableEntity();
@@ -47,7 +42,7 @@ app.MapPost("/clientes/{id}/transacoes", async (
     if (
         transacao.Descricao?.Length > 10
         || (transacao.Tipo != 'c' && transacao.Tipo != 'd')
-        || String.IsNullOrWhiteSpace(transacao.Descricao)
+        || transacao.Descricao is null || transacao?.Descricao == ""
     )
     {
         return Results.UnprocessableEntity();
@@ -55,47 +50,46 @@ app.MapPost("/clientes/{id}/transacoes", async (
 
     await using var conn2 = await npgsqlService.dataSource.OpenConnectionAsync();
 
-    var obj = await conn2.QueryFirstOrDefaultAsync<MeuTipo>(@"
+    var obj = await conn2.QueryFirstOrDefaultAsync<TransacaoResponseDto>(@"
                              select * from criarTransacao(@clienteId, @valor, @tipo, @descricao)",
                              new
                              {
                                  clienteId = id,
-                                 valor = int.Parse(transacao.Valor.ToString()),
+                                 valor = valorInt,
                                  tipo = transacao.Tipo,
                                  descricao = transacao.Descricao
                              });
 
-    if (obj.codigo == -1)
+    if (obj.Codigo == -1)
     {
         return Results.NotFound();
     }
 
-    if (obj.codigo == -2)
+    if (obj.Codigo == -2)
     {
         return Results.UnprocessableEntity();
     }
 
     return Results.Ok(new
     {   
-        obj.limite,
-        Saldo = obj.saldo
+        obj.Limite,
+        Saldo = obj.Saldo
     });
 });
 
 app.MapGet("clientes/{id}/extrato", async (int id, NpgsqlService npgsqlService, IConfiguration config, ILoggerFactory loggerFactory) =>
 {
-    var logger = loggerFactory.CreateLogger("loggerExtrato");
 
     ExtratoResponseDto extrato = null;
     try
     {
         await using var conn = await npgsqlService.dataSource.OpenConnectionAsync();
-        var a = await conn.QueryFirstOrDefaultAsync<string>(@"
+        var result = await conn.QueryFirstOrDefaultAsync<string>(@"
         select * from obterextrato(@idCliente)",
         new { idCliente = id }
         );
 
-        extrato = JsonSerializer.Deserialize<ExtratoResponseDto>(a, new JsonSerializerOptions
+        extrato = JsonSerializer.Deserialize<ExtratoResponseDto>(result, new JsonSerializerOptions
         {
             PropertyNameCaseInsensitive = true
         });
@@ -103,42 +97,17 @@ app.MapGet("clientes/{id}/extrato", async (int id, NpgsqlService npgsqlService, 
     }
     catch (Exception)
     {
-        logger.LogError("deu merda");
         throw;
     }
 
-    var resp = extrato;
 
-    if (resp.Codigo == -1)
+    if (extrato.Codigo == -1)
     {
         return Results.NotFound();
     }
 
-    return Results.Ok(resp);
+    return Results.Ok(extrato);
 
 });
 
-bool IsConcurrencyException(PostgresException ex) => ex.SqlState == "40001";
-
 app.Run();
-
-
-public class Usuario()
-{
-    public int Id { get; set; }
-    public string Nome { get; set; }
-}
-class Cliente()
-{
-    public int Id { get; set; }
-    public int Limite { get; set; }
-    public int Saldo { get; set; }
-}
-
-
-public class MeuTipo
-{
-    public int codigo { get; set; }
-    public int limite { get; set; }
-    public int saldo { get; set; }
-};
