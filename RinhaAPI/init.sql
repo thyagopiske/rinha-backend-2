@@ -1,11 +1,11 @@
 
-create table if not exists Clientes (
+create unlogged table if not exists Clientes (
 	id serial primary key,
   	limite integer,
 	saldo integer
 );
 
-create table if not exists Transacoes (
+create unlogged table if not exists Transacoes (
 	id serial primary key,
 	clienteId integer not null references Clientes(id),
 	valor integer,
@@ -37,7 +37,7 @@ create or replace function criarTransacao(
 		mt meuTipo;
 		novoSaldo integer;
 	begin 
-		PERFORM pg_advisory_xact_lock(clienteId);
+		perform pg_advisory_xact_lock(clienteId);
 
 		select * 
 		into cliente
@@ -54,7 +54,6 @@ create or replace function criarTransacao(
 		else
 			novoSaldo := cliente.saldo + valor;
 		end if;
-		
 
 		if novoSaldo + cliente.limite < 0 then
 			mt.codigo := -2;

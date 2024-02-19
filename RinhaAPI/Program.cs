@@ -12,6 +12,19 @@ builder.Services.ConfigureHttpJsonOptions(options => {
 options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
 });
 
+// string UnixSocketPath = builder.Configuration["UnixSocketPath"];
+
+// if (File.Exists(UnixSocketPath))
+// {
+//     File.Delete(UnixSocketPath);
+// }
+
+
+// builder.WebHost.ConfigureKestrel(options =>
+// {
+//     options.ListenUnixSocket(UnixSocketPath);
+// });
+
 
 var app = builder.Build();
 
@@ -25,22 +38,16 @@ if (app.Environment.IsDevelopment())
 app.MapPost("/clientes/{id}/transacoes", async (
     int id, 
     NpgsqlService npgsqlService,
-    TransacaoRequestDto transacao, 
-    ILoggerFactory loggerFactory,
-    IConfiguration config) =>
+    TransacaoRequestDto transacao) =>
 {
     if (!int.TryParse(transacao.Valor?.ToString(), out var valorInt))
     {
         return Results.UnprocessableEntity();
     }
 
-    if (valorInt < 0)
-    {
-        return Results.UnprocessableEntity();
-    }
-
     if (
-        transacao.Descricao?.Length > 10
+        valorInt < 0
+        || transacao.Descricao?.Length > 10
         || (transacao.Tipo != 'c' && transacao.Tipo != 'd')
         || transacao.Descricao is null || transacao?.Descricao == ""
     )
@@ -48,36 +55,47 @@ app.MapPost("/clientes/{id}/transacoes", async (
         return Results.UnprocessableEntity();
     }
 
-    await using var conn2 = await npgsqlService.dataSource.OpenConnectionAsync();
+    await using var conn = await npgsqlService.dataSource.OpenConnectionAsync();
 
-    var obj = await conn2.QueryFirstOrDefaultAsync<TransacaoResponseDto>(@"
-                             select * from criarTransacao(@clienteId, @valor, @tipo, @descricao)",
-                             new
-                             {
-                                 clienteId = id,
-                                 valor = valorInt,
-                                 tipo = transacao.Tipo,
-                                 descricao = transacao.Descricao
-                             });
+    using var cmd = conn.CreateCommand();
+    cmd.CommandText = "select * from criarTransacao(@clienteId, @valor, @tipo, @descricao)";
 
-    if (obj.Codigo == -1)
+    cmd.Parameters.AddWithValue("clienteId", id);
+    cmd.Parameters.AddWithValue("valor", valorInt);
+    cmd.Parameters.AddWithValue("tipo", transacao.Tipo);
+    cmd.Parameters.AddWithValue("descricao", transacao.Descricao);
+
+    await cmd.PrepareAsync();
+
+    await using var reader = await cmd.ExecuteReaderAsync();
+
+    int? codigo = null, limite = null, saldo = null;
+    if (await reader.ReadAsync())
+    {
+        codigo = await reader.GetFieldValueAsync<int?>(0);
+        limite = await reader.GetFieldValueAsync<int?>(1);
+        saldo = await reader.GetFieldValueAsync<int?>(2);
+    } 
+
+
+    if (codigo == -1)
     {
         return Results.NotFound();
     }
 
-    if (obj.Codigo == -2)
+    if (codigo == -2)
     {
         return Results.UnprocessableEntity();
     }
 
     return Results.Ok(new
     {   
-        obj.Limite,
-        Saldo = obj.Saldo
+        Limite = limite,
+        Saldo = saldo
     });
 });
 
-app.MapGet("clientes/{id}/extrato", async (int id, NpgsqlService npgsqlService, IConfiguration config, ILoggerFactory loggerFactory) =>
+app.MapGet("clientes/{id}/extrato", async (int id, NpgsqlService npgsqlService) =>
 {
 
     ExtratoResponseDto extrato = null;
