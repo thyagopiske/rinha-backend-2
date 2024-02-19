@@ -25,7 +25,7 @@ services:
     #   - UnixSocketPath=/tmp/api2.sock
     ports:
       - 8081:8080
-    volumes:
+    # volumes:
       # - /tmp/api2.sock:/tmp/api2.sock
 
   db:
