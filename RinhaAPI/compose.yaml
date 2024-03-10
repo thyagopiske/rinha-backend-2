@@ -17,6 +17,11 @@ services:
       - /var/run/postgresql:/var/run/postgresql
       # - /tmp/api1.sock:/tmp/api1.sock
     # network_mode: host
+    deploy:
+      resources:
+        limits:
+          cpus: '0.3'
+          memory: 150M
 
   api2:
     <<: *api
@@ -44,6 +49,11 @@ services:
     networks:
       - mynet
     # network_mode: host
+    deploy:
+      resources:
+        limits:
+          cpus: '0.75'
+          memory: 240M
 
   nginx:
     image: nginx:latest
@@ -59,7 +69,11 @@ services:
     networks:
       - mynet
     # network_mode: host
-  
+    deploy:
+      resources:
+        limits:
+          cpus: '0.15'
+          memory: 10M
 
 networks:
   mynet:

@@ -99,25 +99,17 @@ app.MapGet("clientes/{id}/extrato", async (int id, NpgsqlService npgsqlService) 
 {
 
     ExtratoResponseDto extrato = null;
-    try
+
+    await using var conn = await npgsqlService.dataSource.OpenConnectionAsync();
+    var result = await conn.QueryFirstOrDefaultAsync<string>(@"
+    select * from obterextrato(@idCliente)",
+    new { idCliente = id }
+    );
+
+    extrato = JsonSerializer.Deserialize<ExtratoResponseDto>(result, new JsonSerializerOptions
     {
-        await using var conn = await npgsqlService.dataSource.OpenConnectionAsync();
-        var result = await conn.QueryFirstOrDefaultAsync<string>(@"
-        select * from obterextrato(@idCliente)",
-        new { idCliente = id }
-        );
-
-        extrato = JsonSerializer.Deserialize<ExtratoResponseDto>(result, new JsonSerializerOptions
-        {
-            PropertyNameCaseInsensitive = true
-        });
-
-    }
-    catch (Exception)
-    {
-        throw;
-    }
-
+        PropertyNameCaseInsensitive = true
+    });
 
     if (extrato.Codigo == -1)
     {
